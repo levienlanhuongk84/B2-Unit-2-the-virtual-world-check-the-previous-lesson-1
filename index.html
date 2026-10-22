@@ -430,7 +430,7 @@
 
 /* ====================== CONFIG ====================== */
 const CONFIG = {
-  API_URL: '',                  // để rỗng lúc build — điền URL Apps Script (…/exec) SAU KHI deploy xong
+  API_URL: 'https://script.google.com/macros/s/AKfycbzyGwVVvq8rzRryUdNthwms2_UY76YahKq8Q0H-dhRva6iKWCW4KzqbSTxj5K-EaHsw/exec',   // Apps Script backend (Sheet: The Virtual World B2 · Check the previous lesson · Unit 2 – CH)
   LOCAL_USERS: [],               // luôn để rỗng — tài khoản chỉ sống trong Code.gs, không bao giờ trong trang này
   DURATION_MIN: 25,              // phút làm bài
   PASS_MARK: 5.5,                // ngưỡng "đạt" trên dashboard (thang 10) — CH: đạt ≥ 5.5
@@ -585,8 +585,17 @@ async function api(action, payload) {
   if (!CONFIG.API_URL) return localApi(action, payload);
   const auth = A ? { user: A.name, password: A.password } : {};
   if (action === 'list' || action === 'settings') {
-    const res = await fetch(CONFIG.API_URL + '?action=' + action + '&_=' + Date.now(), { redirect: 'follow' });
-    return res.json();
+    // Apps Script chạy tối đa ~30 lượt cùng lúc: cả lớp mở trang/Class report cùng giây → Google trả trang HTML lỗi
+    // thay vì JSON. Tự đọc lại tối đa 3 lần, giãn cách ngẫu nhiên tăng dần (load test 110 HV, 22/10/2026).
+    for (let t = 0; ; t++) {
+      try {
+        const res = await fetch(CONFIG.API_URL + '?action=' + action + '&_=' + Date.now(), { redirect: 'follow' });
+        return await res.json();
+      } catch (e) {
+        if (t >= 3) throw e;
+        await new Promise(r => setTimeout(r, 800 + Math.random() * 1500 * (t + 1)));
+      }
+    }
   }
   const res = await fetch(CONFIG.API_URL, { method: 'POST', body: JSON.stringify(Object.assign({ action }, payload, auth)), redirect: 'follow' });
   return res.json();
